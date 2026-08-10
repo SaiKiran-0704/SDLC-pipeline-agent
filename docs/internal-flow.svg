@@ -1,0 +1,70 @@
+<svg width="680" height="360" viewBox="0 0 680 360" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+<title>Requirements Agent internal request flow</title>
+<desc>A single request flows through six steps: user request, FastAPI /brd endpoint, Gemini call with system prompt and schema, JSON validation with retry, docx rendering, and the final response.</desc>
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path d="M2 1L8 5L2 9" fill="none" stroke="#5B5FCF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</marker>
+</defs>
+<style>
+  .box { fill: #EEF0FF; stroke: #5B5FCF; }
+  .badge { fill: #5B5FCF; }
+  .th { fill: #1F2140; font-size: 15px; font-weight: 600; }
+  .ts { fill: #55577A; font-size: 12px; }
+  .arr { stroke: #5B5FCF; stroke-width: 1.5; fill: none; }
+</style>
+
+<g>
+<rect class="box" x="40" y="60" width="160" height="100" rx="12" stroke-width="1"/>
+<circle class="badge" cx="62" cy="82" r="12"/>
+<text x="62" y="82" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="600" fill="white">1</text>
+<text class="th" x="120" y="118" text-anchor="middle" dominant-baseline="central">User Request</text>
+<text class="ts" x="120" y="138" text-anchor="middle" dominant-baseline="central">browser or curl</text>
+</g>
+
+<g>
+<rect class="box" x="250" y="60" width="160" height="100" rx="12" stroke-width="1"/>
+<circle class="badge" cx="272" cy="82" r="12"/>
+<text x="272" y="82" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="600" fill="white">2</text>
+<text class="th" x="330" y="118" text-anchor="middle" dominant-baseline="central">FastAPI /brd</text>
+<text class="ts" x="330" y="138" text-anchor="middle" dominant-baseline="central">checks &amp; routes</text>
+</g>
+
+<g>
+<rect class="box" x="460" y="60" width="160" height="100" rx="12" stroke-width="1"/>
+<circle class="badge" cx="482" cy="82" r="12"/>
+<text x="482" y="82" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="600" fill="white">3</text>
+<text class="th" x="540" y="118" text-anchor="middle" dominant-baseline="central">Gemini call</text>
+<text class="ts" x="540" y="138" text-anchor="middle" dominant-baseline="central">prompt + schema</text>
+</g>
+
+<g>
+<rect class="box" x="460" y="220" width="160" height="100" rx="12" stroke-width="1"/>
+<circle class="badge" cx="482" cy="242" r="12"/>
+<text x="482" y="242" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="600" fill="white">4</text>
+<text class="th" x="540" y="278" text-anchor="middle" dominant-baseline="central">Validate/retry</text>
+<text class="ts" x="540" y="298" text-anchor="middle" dominant-baseline="central">validates JSON</text>
+</g>
+
+<g>
+<rect class="box" x="250" y="220" width="160" height="100" rx="12" stroke-width="1"/>
+<circle class="badge" cx="272" cy="242" r="12"/>
+<text x="272" y="242" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="600" fill="white">5</text>
+<text class="th" x="330" y="278" text-anchor="middle" dominant-baseline="central">render_docx()</text>
+<text class="ts" x="330" y="298" text-anchor="middle" dominant-baseline="central">writes .docx</text>
+</g>
+
+<g>
+<rect class="box" x="40" y="220" width="160" height="100" rx="12" stroke-width="1"/>
+<circle class="badge" cx="62" cy="242" r="12"/>
+<text x="62" y="242" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="600" fill="white">6</text>
+<text class="th" x="120" y="278" text-anchor="middle" dominant-baseline="central">Response</text>
+<text class="ts" x="120" y="298" text-anchor="middle" dominant-baseline="central">JSON + doc link</text>
+</g>
+
+<line x1="200" y1="110" x2="250" y2="110" class="arr" marker-end="url(#arrow)"/>
+<line x1="410" y1="110" x2="460" y2="110" class="arr" marker-end="url(#arrow)"/>
+<line x1="540" y1="160" x2="540" y2="220" class="arr" marker-end="url(#arrow)"/>
+<line x1="460" y1="270" x2="410" y2="270" class="arr" marker-end="url(#arrow)"/>
+<line x1="250" y1="270" x2="200" y2="270" class="arr" marker-end="url(#arrow)"/>
+</svg>

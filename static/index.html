@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Requirements Agent — Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #131318;
+    --panel: #191a21;
+    --panel-border: #26272f;
+    --text: #ECECF2;
+    --text-dim: #8B8C99;
+    --accent: #8B8FFF;
+    --accent-dim: #5B5FCF;
+    --must: #FF8A65;
+    --should: #FFD166;
+    --could: #6EE7B7;
+    --mono: 'JetBrains Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
+  header { padding: 28px 40px 20px; border-bottom: 1px solid var(--panel-border); display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  header .mark { width: 10px; height: 10px; background: var(--accent); border-radius: 2px; display: inline-block; transform: rotate(45deg); }
+  header h1 { font-family: 'Space Grotesk', sans-serif; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+  header .sub { color: var(--text-dim); font-size: 13px; font-family: var(--mono); }
+  main { flex: 1; display: grid; grid-template-columns: 380px 1fr; gap: 1px; background: var(--panel-border); }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  .pane { background: var(--bg); padding: 36px 40px; }
+
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 14px; }
+  textarea { width: 100%; min-height: 160px; background: var(--panel); border: 1px solid var(--panel-border); border-radius: 8px; color: var(--text); font-family: 'Inter', sans-serif; font-size: 14.5px; line-height: 1.55; padding: 16px; resize: vertical; transition: border-color 0.15s ease; }
+  textarea:focus { outline: none; border-color: var(--accent-dim); }
+  textarea::placeholder { color: var(--text-dim); }
+
+  input[type="file"] {
+    width: 100%;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    color: var(--text-dim);
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+  #codebaseStatus { font-family: var(--mono); font-size: 12px; color: var(--text-dim); margin-bottom: 16px; min-height: 16px; }
+
+  button { background: var(--accent); color: #131318; border: none; border-radius: 8px; padding: 13px 20px; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 14.5px; cursor: pointer; transition: background 0.15s ease, transform 0.1s ease; }
+  button:hover:not(:disabled) { background: #A0A3FF; }
+  button:active:not(:disabled) { transform: scale(0.99); }
+  button:disabled { background: #33343d; color: var(--text-dim); cursor: not-allowed; }
+  #submitBtn { margin-top: 16px; width: 100%; }
+
+  .examples { margin-top: 28px; display: flex; flex-direction: column; gap: 8px; }
+  .examples .label { font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
+  .example-chip { text-align: left; background: transparent; border: 1px solid var(--panel-border); color: var(--text-dim); font-family: 'Inter', sans-serif; font-weight: 400; font-size: 13px; padding: 10px 12px; border-radius: 6px; }
+  .example-chip:hover:not(:disabled) { border-color: var(--accent-dim); color: var(--text); background: transparent; }
+
+  .doc-pane { position: relative; }
+
+  .stepper { display: flex; align-items: center; flex-wrap: wrap; gap: 0; margin-bottom: 30px; row-gap: 10px; }
+  .step { display: flex; align-items: center; gap: 6px; }
+  .step-circle { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--panel-border); display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 10px; color: var(--text-dim); flex-shrink: 0; transition: all 0.2s ease; }
+  .step-circle.active { border-color: var(--accent); color: var(--accent); background: rgba(139,143,255,0.1); }
+  .step-circle.done { border-color: var(--could); background: var(--could); color: #131318; }
+  .step-label { font-family: 'Space Grotesk', sans-serif; font-size: 11.5px; font-weight: 600; color: var(--text-dim); }
+  .step-label.active, .step-label.done { color: var(--text); }
+  .step-line { width: 16px; height: 1px; background: var(--panel-border); margin: 0 6px; }
+  .step-line.done { background: var(--could); }
+
+  .doc-status { font-family: var(--mono); font-size: 12px; color: var(--text-dim); margin-bottom: 22px; display: flex; align-items: center; gap: 8px; min-height: 16px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-dim); }
+  .dot.live { background: var(--could); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+  .empty-state { color: var(--text-dim); font-size: 14px; line-height: 1.7; max-width: 420px; }
+
+  .doc-title { font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 6px; }
+  .doc-id { font-family: var(--mono); font-size: 12px; color: var(--accent); margin-bottom: 28px; }
+
+  .revision-tag { display: inline-block; font-family: var(--mono); font-size: 11px; color: var(--should); background: rgba(255,209,102,0.1); border: 1px solid rgba(255,209,102,0.25); padding: 3px 9px; border-radius: 12px; margin-bottom: 20px; }
+
+  .section { opacity: 0; transform: translateY(8px); animation: reveal 0.5s ease forwards; margin-bottom: 26px; padding-bottom: 26px; border-bottom: 1px solid var(--panel-border); }
+  .section:last-child { border-bottom: none; }
+  @keyframes reveal { to { opacity: 1; transform: translateY(0); } }
+  .section h3 { font-family: 'Space Grotesk', sans-serif; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .section p { font-size: 14.5px; line-height: 1.65; color: var(--text); }
+  .section ul { list-style: none; }
+  .section li { font-size: 14px; line-height: 1.6; padding-left: 16px; position: relative; margin-bottom: 6px; color: var(--text); }
+  .section li::before { content: '—'; position: absolute; left: 0; color: var(--text-dim); }
+
+  .fr-item { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; }
+  .fr-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .fr-id { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
+  .priority { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 8px; border-radius: 10px; }
+  .priority.Must { background: rgba(255,138,101,0.15); color: var(--must); }
+  .priority.Should { background: rgba(255,209,102,0.15); color: var(--should); }
+  .priority.Could { background: rgba(110,231,183,0.15); color: var(--could); }
+  .fr-desc { font-size: 14px; line-height: 1.55; color: var(--text); }
+  .fr-tag { margin-top: 6px; color: var(--accent); font-family: var(--mono); font-size: 12px; }
+
+  .stub-box { background: var(--panel); border: 1px dashed var(--panel-border); border-radius: 8px; padding: 18px; }
+  .stub-box .stub-label { font-family: var(--mono); font-size: 11px; color: var(--should); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+  .stub-box pre { font-family: var(--mono); font-size: 12.5px; color: var(--text-dim); white-space: pre-wrap; word-break: break-word; }
+
+  .code-box { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 8px; padding: 16px; max-height: 420px; overflow-y: auto; }
+  .code-box pre { font-family: var(--mono); font-size: 12px; line-height: 1.6; color: var(--text); white-space: pre-wrap; word-break: break-word; margin: 0; }
+  .copy-btn { padding: 4px 10px; font-size: 11px; background: var(--panel-border); color: var(--text-dim); border-radius: 6px; }
+  .copy-btn:hover:not(:disabled) { background: var(--accent-dim); color: white; }
+
+  .approval-bar { display: flex; gap: 10px; margin-top: 8px; padding-top: 24px; }
+  .approve-btn { background: var(--could); color: #131318; }
+  .approve-btn:hover:not(:disabled) { background: #86F0C4; }
+  .reject-btn { background: transparent; border: 1px solid var(--must); color: var(--must); }
+  .reject-btn:hover:not(:disabled) { background: rgba(255,138,101,0.1); }
+
+  .feedback-box { margin-top: 16px; }
+  .feedback-box textarea { min-height: 90px; }
+  .feedback-actions { display: flex; gap: 10px; margin-top: 10px; }
+  .cancel-btn { background: transparent; border: 1px solid var(--panel-border); color: var(--text-dim); }
+  .cancel-btn:hover:not(:disabled) { background: transparent; color: var(--text); border-color: var(--text-dim); }
+
+  .download-bar { display: flex; gap: 10px; margin-top: 8px; padding-top: 24px; }
+  .download-bar a { background: var(--accent); color: #131318; text-decoration: none; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 13.5px; padding: 11px 18px; border-radius: 8px; }
+  .download-bar a:hover { background: #A0A3FF; }
+
+  .error-box { border: 1px solid #4a2a2a; background: rgba(255,138,101,0.08); border-radius: 8px; padding: 14px 16px; color: var(--must); font-size: 13.5px; font-family: var(--mono); }
+
+  .complete-banner { background: rgba(110,231,183,0.08); border: 1px solid rgba(110,231,183,0.25); border-radius: 8px; padding: 16px 18px; color: var(--could); font-family: var(--mono); font-size: 13px; margin-bottom: 24px; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="mark"></span>
+  <h1>Requirements Agent</h1>
+  <span class="sub">requirements &rarr; design &rarr; dev &rarr; codegen &rarr; qa &rarr; deploy</span>
+</header>
+
+<main>
+  <div class="pane">
+    <div class="eyebrow">Describe the request</div>
+    <textarea id="requestInput" placeholder="e.g. We need customers to reset their own password instead of calling support..."></textarea>
+
+    <div class="eyebrow" style="margin-top:24px;">Existing codebase (optional)</div>
+    <input type="file" id="codebaseInput" accept=".zip">
+    <div id="codebaseStatus"></div>
+
+    <button id="submitBtn">Start pipeline</button>
+
+    <div class="examples">
+      <div class="label">Or try one of these</div>
+      <button class="example-chip" data-example="I want to build an Employee Leave Management System.">Employee Leave Management System</button>
+      <button class="example-chip" data-example="We need a system for customers to track their order status in real time instead of emailing support.">Real-time order tracking</button>
+      <button class="example-chip" data-example="Build an internal tool for finance to approve vendor invoices over $5,000.">Vendor invoice approval tool</button>
+    </div>
+  </div>
+
+  <div class="pane doc-pane">
+    <div class="stepper" id="stepper"></div>
+    <div class="doc-status" id="docStatus"></div>
+    <div id="docContent">
+      <div class="empty-state">
+        Describe a business request on the left. Optionally attach an existing codebase (.zip) so requirements, design, and generated code are grounded in what's actually there. The pipeline runs Requirements &rarr; Design &rarr; Dev &rarr; Codegen &rarr; QA &rarr; Deploy, pausing for your approval before each stage. QA and Deploy are currently stubs.
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+const input = document.getElementById('requestInput');
+const submitBtn = document.getElementById('submitBtn');
+const docStatus = document.getElementById('docStatus');
+const docContent = document.getElementById('docContent');
+const stepperEl = document.getElementById('stepper');
+const exampleChips = document.querySelectorAll('.example-chip');
+const codebaseInput = document.getElementById('codebaseInput');
+const codebaseStatus = document.getElementById('codebaseStatus');
+
+let threadId = null;
+let revisionCount = 0;
+let uploadedCodebaseId = null;
+
+const STAGE_ORDER = ["Requirements (BRD)", "Design", "Development", "Generated Code", "QA (pre-deploy)"];
+const STEP_LABELS = ["Requirements", "Design", "Dev", "Codegen", "QA", "Deploy"];
+
+exampleChips.forEach(chip => {
+  chip.addEventListener('click', () => { input.value = chip.dataset.example; input.focus(); });
+});
+
+codebaseInput.addEventListener('change', async () => {
+  const file = codebaseInput.files[0];
+  if (!file) return;
+
+  codebaseStatus.textContent = 'Uploading and scanning...';
+  uploadedCodebaseId = null;
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const res = await fetch('/codebase/upload', { method: 'POST', body: formData });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    uploadedCodebaseId = data.codebase_id;
+    codebaseStatus.textContent = `✓ Scanned ${data.file_count} files`;
+  } catch (err) {
+    codebaseStatus.textContent = `Upload failed: ${err.message}`;
+    uploadedCodebaseId = null;
+  }
+});
+
+function setStatus(text, live) {
+  docStatus.innerHTML = `<span class="dot ${live ? 'live' : ''}"></span>${text}`;
+}
+
+function renderStepper(activeIndex) {
+  let html = '';
+  STEP_LABELS.forEach((label, i) => {
+    let circleClass = '', labelClass = '', symbol = i + 1;
+    if (i < activeIndex) { circleClass = 'done'; labelClass = 'done'; symbol = '✓'; }
+    else if (i === activeIndex) { circleClass = 'active'; labelClass = 'active'; }
+    html += `<div class="step">
+      <div class="step-circle ${circleClass}">${symbol}</div>
+      <div class="step-label ${labelClass}">${label}</div>
+    </div>`;
+    if (i < STEP_LABELS.length - 1) {
+      html += `<div class="step-line ${i < activeIndex ? 'done' : ''}"></div>`;
+    }
+  });
+  stepperEl.innerHTML = html;
+}
+
+function sectionHTML(title, inner, delay) {
+  return `<div class="section" style="animation-delay:${delay}ms"><h3>${title}</h3>${inner}</div>`;
+}
+function renderList(items) {
+  return `<ul>${items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>`;
+}
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.innerText = str;
+  return d.innerHTML;
+}
+
+async function submitRequest() {
+  const text = input.value.trim();
+  if (!text) { input.focus(); return; }
+
+  threadId = null;
+  revisionCount = 0;
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Starting...';
+  renderStepper(0);
+  setStatus('Sending request to Requirements Agent', true);
+  docContent.innerHTML = '';
+
+  try {
+    const res = await fetch('/pipeline/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request_text: text, codebase_id: uploadedCodebaseId })
+    });
+    if (!res.ok) throw new Error(`Server returned ${res.status}: ${await res.text()}`);
+
+    const data = await res.json();
+    threadId = data.thread_id;
+    handlePipelineResponse(data);
+
+  } catch (err) {
+    setStatus('Failed', false);
+    docContent.innerHTML = `<div class="error-box">${escapeHtml(err.message)}</div>`;
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Start pipeline';
+  }
+}
+
+function handlePipelineResponse(data) {
+  if (data.status === 'paused') {
+    const stepIndex = STAGE_ORDER.indexOf(data.stage);
+    renderStepper(stepIndex >= 0 ? stepIndex : 0);
+    setStatus(`Awaiting approval — ${data.stage}`, false);
+    renderApprovalReview(data.stage, data.data);
+  } else if (data.status === 'completed') {
+    renderStepper(6);
+    setStatus('Pipeline complete', false);
+    renderCompletion(data.result, data.download_url);
+  }
+}
+
+function renderApprovalReview(stage, data) {
+  let html = '';
+  if (revisionCount > 0) {
+    html += `<div class="revision-tag">Revision ${revisionCount}</div>`;
+  }
+
+  if (stage === "Requirements (BRD)") {
+    html += renderBRDContent(data);
+  } else if (stage === "Design") {
+    html += renderDesignContent(data);
+  } else if (stage === "Generated Code") {
+    html += renderCodegenContent(data);
+  } else {
+    html += `<div class="doc-title">${escapeHtml(stage)}</div>`;
+    html += `<div class="doc-id">STAGE OUTPUT &middot; thread ${threadId}</div>`;
+    html += sectionHTML(stage, `<div class="stub-box"><div class="stub-label">Stub output — this agent isn't built yet</div><pre>${escapeHtml(JSON.stringify(data, null, 2))}</pre></div>`, 0);
+  }
+
+  html += `<div class="approval-bar">
+    <button class="approve-btn" id="approveBtn">✓ Approve &amp; Continue</button>
+    <button class="reject-btn" id="rejectBtn">✗ Request Changes</button>
+  </div>
+  <div class="feedback-box" id="feedbackBox" style="display:none;">
+    <textarea id="feedbackInput" placeholder="What should change?"></textarea>
+    <div class="feedback-actions">
+      <button id="submitFeedbackBtn">Submit &amp; Regenerate</button>
+      <button class="cancel-btn" id="cancelFeedbackBtn">Cancel</button>
+    </div>
+  </div>`;
+
+  docContent.innerHTML = html;
+
+  document.getElementById('approveBtn').addEventListener('click', () => resumePipeline(true, null));
+  document.getElementById('rejectBtn').addEventListener('click', () => {
+    document.getElementById('feedbackBox').style.display = 'block';
+    document.getElementById('feedbackInput').focus();
+  });
+  document.getElementById('cancelFeedbackBtn').addEventListener('click', () => {
+    document.getElementById('feedbackBox').style.display = 'none';
+  });
+  document.getElementById('submitFeedbackBtn').addEventListener('click', () => {
+    const fb = document.getElementById('feedbackInput').value.trim();
+    if (!fb) { document.getElementById('feedbackInput').focus(); return; }
+    resumePipeline(false, fb);
+  });
+
+  document.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      navigator.clipboard.writeText(btn.dataset.code);
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+    });
+  });
+}
+
+function renderBRDContent(brd) {
+  let html = `<div class="doc-title">${escapeHtml(brd.title)}</div>`;
+  html += `<div class="doc-id">DRAFT BRD &middot; thread ${threadId}</div>`;
+  let d = 0, step = 70;
+  html += sectionHTML('Executive Summary', `<p>${escapeHtml(brd.executive_summary)}</p>`, d); d += step;
+  html += sectionHTML('Business Objectives', renderList(brd.business_objectives), d); d += step;
+  html += sectionHTML('In Scope', renderList(brd.in_scope), d); d += step;
+  html += sectionHTML('Out of Scope', renderList(brd.out_of_scope), d); d += step;
+  let frHtml = brd.functional_requirements.map(fr => `
+    <div class="fr-item">
+      <div class="fr-top"><span class="fr-id">${escapeHtml(fr.id)}</span><span class="priority ${fr.priority}">${fr.priority}</span></div>
+      <div class="fr-desc">${escapeHtml(fr.description)}</div>
+    </div>`).join('');
+  html += sectionHTML('Functional Requirements', frHtml, d); d += step;
+  html += sectionHTML('Assumptions', renderList(brd.assumptions), d); d += step;
+  html += sectionHTML('Open Questions', renderList(brd.open_questions), d);
+  return html;
+}
+
+function renderDesignContent(design) {
+  let html = `<div class="doc-title">${escapeHtml(design.title)}</div>`;
+  html += `<div class="doc-id">DRAFT DESIGN &middot; thread ${threadId}</div>`;
+  let d = 0, step = 70;
+  html += sectionHTML('Architecture Overview', `<p>${escapeHtml(design.architecture_overview)}</p>`, d); d += step;
+  let compHtml = design.components.map(c => `
+    <div class="fr-item">
+      <div class="fr-top"><span class="fr-id">${escapeHtml(c.name)}</span></div>
+      <div class="fr-desc">${escapeHtml(c.responsibility)}</div>
+      <div class="fr-tag">Addresses: ${c.addresses_requirement_ids.join(', ')}</div>
+    </div>`).join('');
+  html += sectionHTML('Components', compHtml, d); d += step;
+  html += sectionHTML('Tech Stack Suggestions', renderList(design.tech_stack_suggestions), d); d += step;
+  html += sectionHTML('Design Risks', renderList(design.design_risks), d); d += step;
+  html += sectionHTML('Open Questions', renderList(design.open_questions), d);
+  return html;
+}
+
+function renderCodegenContent(results) {
+  let html = `<div class="doc-title">Generated Code</div>`;
+  html += `<div class="doc-id">REVIEW BEFORE APPLYING &middot; thread ${threadId}</div>`;
+  let d = 0, step = 90;
+
+  results.forEach(r => {
+    if (r.status === "failed") {
+      html += sectionHTML(r.path, `<div class="error-box">Failed to generate: ${escapeHtml(r.error)}</div>`, d);
+    } else {
+      const badge = r.is_new_file
+        ? '<span class="priority Should">NEW FILE</span>'
+        : '<span class="priority Could">MODIFIED</span>';
+      const codeId = `code-${Math.random().toString(36).slice(2, 9)}`;
+      const inner = `
+        <div class="code-box">
+          <pre id="${codeId}">${escapeHtml(r.updated_content)}</pre>
+        </div>
+        <div style="margin-top:8px; display:flex; justify-content:flex-end;">
+          <button class="copy-btn" data-code="${escapeHtml(r.updated_content).replace(/"/g, '&quot;')}">Copy</button>
+        </div>`;
+      html += sectionHTML(`${escapeHtml(r.path)} ${badge}`, inner, d);
+    }
+    d += step;
+  });
+
+  return html;
+}
+
+async function resumePipeline(approved, feedback) {
+  const buttons = docContent.querySelectorAll('button');
+  buttons.forEach(b => b.disabled = true);
+  setStatus(approved ? 'Continuing to next stage' : 'Revising with your feedback', true);
+
+  try {
+    const res = await fetch(`/pipeline/${threadId}/resume`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approved, feedback })
+    });
+    if (!res.ok) throw new Error(`Server returned ${res.status}: ${await res.text()}`);
+
+    const data = await res.json();
+    if (!approved) revisionCount += 1;
+    else revisionCount = 0;
+    handlePipelineResponse(data);
+
+  } catch (err) {
+    setStatus('Failed', false);
+    docContent.innerHTML = `<div class="error-box">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function renderCompletion(result, downloadUrl) {
+  let html = `<div class="complete-banner">✓ Pipeline complete — all stages approved through Deploy (stub).</div>`;
+  if (result.design) {
+    html += renderDesignContent(result.design);
+  }
+  html += `<div class="download-bar">
+    <a href="${downloadUrl}" download>Download Design .docx</a>
+  </div>`;
+  docContent.innerHTML = html;
+}
+
+submitBtn.addEventListener('click', submitRequest);
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitRequest();
+});
+</script>
+
+</body>
+</html>

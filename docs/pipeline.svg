@@ -1,0 +1,44 @@
+<svg width="680" height="350" viewBox="0 0 680 350" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+<title>Requirements Agent to Design Agent pipeline</title>
+<desc>The Requirements Agent turns a raw request into BRD JSON, which is passed directly as input to the Design Agent. Both agents call the same shared Gemini API backend independently.</desc>
+<defs>
+<marker id="arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path d="M2 1L8 5L2 9" fill="none" stroke="#5B5FCF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</marker>
+</defs>
+<style>
+  .box1 { fill: #EAF1FF; stroke: #3E6FD9; }
+  .box2 { fill: #F1EEFF; stroke: #7A5FD9; }
+  .box3 { fill: #FFF0EC; stroke: #E0704A; }
+  .th { fill: #1F2140; font-size: 15px; font-weight: 600; }
+  .ts { fill: #55577A; font-size: 12px; }
+  .arr { stroke: #5B5FCF; stroke-width: 1.5; fill: none; }
+</style>
+
+<g>
+<rect class="box1" x="40" y="60" width="260" height="140" rx="14" stroke-width="1"/>
+<text class="th" x="170" y="118" text-anchor="middle" dominant-baseline="central">Requirements Agent</text>
+<text class="ts" x="170" y="140" text-anchor="middle" dominant-baseline="central">raw request &#8594; BRD JSON</text>
+</g>
+
+<g>
+<rect class="box2" x="380" y="60" width="260" height="140" rx="14" stroke-width="1"/>
+<text class="th" x="510" y="118" text-anchor="middle" dominant-baseline="central">Design Agent</text>
+<text class="ts" x="510" y="140" text-anchor="middle" dominant-baseline="central">BRD JSON &#8594; Design JSON</text>
+</g>
+
+<line x1="300" y1="130" x2="380" y2="130" class="arr" marker-end="url(#arrow2)"/>
+<text class="ts" x="340" y="116" text-anchor="middle">BRD.json</text>
+
+<g>
+<rect class="box3" x="210" y="250" width="260" height="60" rx="12" stroke-width="1"/>
+<text class="th" x="340" y="270" text-anchor="middle" dominant-baseline="central">Gemini API</text>
+<text class="ts" x="340" y="290" text-anchor="middle" dominant-baseline="central">Shared LLM backend</text>
+</g>
+
+<line x1="170" y1="200" x2="300" y2="250" class="arr" marker-end="url(#arrow2)"/>
+<text class="ts" x="220" y="215" text-anchor="middle">LLM call</text>
+
+<line x1="510" y1="200" x2="380" y2="250" class="arr" marker-end="url(#arrow2)"/>
+<text class="ts" x="460" y="215" text-anchor="middle">LLM call</text>
+</svg>
