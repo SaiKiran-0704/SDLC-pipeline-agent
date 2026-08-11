@@ -76,8 +76,11 @@ def codegen_node(state: PipelineState) -> PipelineState:
 # ---------- Stub nodes (not built yet) ----------
 
 def qa_node(state: PipelineState) -> PipelineState:
-    print("[STUB] QA Agent would run here, using state['dev_output']")
-    return {"qa_output": {"status": "stub", "note": "QA Agent not yet implemented"}}
+    from qa_agent import run_qa
+    import json
+    qa_result = run_qa(state["codegen_output"])
+    print("\n[QA RESULT]\n" + json.dumps(qa_result, indent=2) + "\n")
+    return {"qa_output": qa_result}
 
 
 MCP_SERVER_PATH = "/Users/saik/Desktop/mcp_server/github_mcp_server.py"
