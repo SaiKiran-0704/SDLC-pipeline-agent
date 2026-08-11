@@ -72,9 +72,14 @@ def dev_node(state: PipelineState) -> PipelineState:
 
 
 def codegen_node(state: PipelineState) -> PipelineState:
+    from skills import detect_relevant_skills, load_skill_content
+    matched = detect_relevant_skills(state.get("codebase_context"))
+    skill_content = load_skill_content(matched) if matched else None
+
     results = generate_all_code(
         state["dev_output"], state["design"], state.get("codebase_id"),
-        feedback=state.get("qa_feedback")
+        feedback=state.get("qa_feedback"),
+        skill_content=skill_content
     )
     return {"codegen_output": results}
 

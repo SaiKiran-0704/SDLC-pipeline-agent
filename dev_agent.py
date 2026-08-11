@@ -107,10 +107,11 @@ Rules:
 """
 
 
-def generate_code_for_file(file_plan: dict, current_content: str | None, design_summary: str, feedback: str | None = None) -> dict:
+def generate_code_for_file(file_plan: dict, current_content: str | None, design_summary: str, feedback: str | None = None, skill_content: str | None = None) -> dict:
     """Generates real, complete file content for one file from the Dev plan.
-    If feedback is provided (e.g. from a failed QA pass), it's appended to
-    the prompt so the regeneration actually addresses the reported issues."""
+    feedback (e.g. from a failed QA pass) and skill_content (project
+    conventions from a matched Skill) are both optional and, when present,
+    appended to the prompt."""
     is_new = current_content is None
     contents = (
         f"Design context:\n{design_summary}\n\n"
@@ -122,6 +123,9 @@ def generate_code_for_file(file_plan: dict, current_content: str | None, design_
         contents += "This is a NEW file — write it from scratch, consistent with the codebase's existing style."
     else:
         contents += f"CURRENT file content:\n```\n{current_content}\n```\n\nModify this file per the plan above. Return the complete updated file."
+
+    if skill_content:
+        contents += f"\n\nFollow these project conventions:\n{skill_content}"
 
     if feedback:
         contents += f"\n\nIMPORTANT — fix these issues found by QA:\n{feedback}"
@@ -141,11 +145,11 @@ def generate_code_for_file(file_plan: dict, current_content: str | None, design_
     return json.loads(response.text)
 
 
-def generate_all_code(dev_plan: dict, design_data: dict, codebase_id: str, feedback: str | None = None) -> list[dict]:
+def generate_all_code(dev_plan: dict, design_data: dict, codebase_id: str, feedback: str | None = None, skill_content: str | None = None) -> list[dict]:
     """Runs generate_code_for_file for every file in the plan, pulling real
     current content from the DB where it exists. Returns a list of results,
     one per file — a partial failure on one file doesn't stop the others.
-    feedback, if provided, is passed to every file's generation call."""
+    feedback and skill_content, if provided, are passed to every file."""
     from db import get_codebase_file
 
     design_summary = f"{design_data['title']}: {design_data['architecture_overview']}"
@@ -154,7 +158,10 @@ def generate_all_code(dev_plan: dict, design_data: dict, codebase_id: str, feedb
     for file_plan in dev_plan["files"]:
         current_content = get_codebase_file(codebase_id, file_plan["path"]) if codebase_id else None
         try:
-            code_result = generate_code_for_file(file_plan, current_content, design_summary, feedback=feedback)
+            code_result = generate_code_for_file(
+                file_plan, current_content, design_summary,
+                feedback=feedback, skill_content=skill_content
+            )
             results.append({"path": file_plan["path"], "status": "ok", **code_result})
         except Exception as e:
             results.append({"path": file_plan["path"], "status": "failed", "error": str(e)})
