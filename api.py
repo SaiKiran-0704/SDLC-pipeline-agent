@@ -3,7 +3,7 @@ import time
 import uuid
 import os
 import zipfile
-from db import save_codebase_files, get_codebase_file, init_db
+from db import save_codebase_files, get_codebase_file, init_db, save_codebase_context, get_codebase_context, save_brd, get_brd
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -22,8 +22,6 @@ logger = logging.getLogger("requirements_agent")
 
 app = FastAPI()
 init_db()
-brd_store = {}
-codebase_store = {}
 
 
 class RequirementRequest(BaseModel):
@@ -52,7 +50,7 @@ def create_brd(payload: RequirementRequest):
     output_path = f"outputs/{doc_id}.docx"
     os.makedirs("outputs", exist_ok=True)
     render_docx(data, output_path)
-    brd_store[doc_id] = data
+    save_brd(doc_id, data)
 
     logger.info(f"REQUEST completed | doc_id={doc_id} | took={round(time.time()-start,2)}s")
     return {"doc_id": doc_id, "brd_json": data, "download_url": f"/brd/{doc_id}/download"}
@@ -65,12 +63,13 @@ def download_brd(doc_id: str):
 
 @app.post("/brd/{doc_id}/design")
 def create_design(doc_id: str):
-    if doc_id not in brd_store:
+    brd = get_brd(doc_id)
+    if brd is None:
         raise HTTPException(status_code=404, detail="No BRD found for that doc_id")
     logger.info(f"DESIGN request received | doc_id={doc_id}")
     start = time.time()
     try:
-        design_data = generate_design_json(brd_store[doc_id])
+        design_data = generate_design_json(brd)
     except RuntimeError as e:
         logger.error(f"DESIGN failed | doc_id={doc_id} | reason={e}")
         raise HTTPException(status_code=502, detail=str(e))
@@ -98,9 +97,9 @@ def start_pipeline(payload: StartPipelineRequest):
 
     codebase_context = None
     if payload.codebase_id:
-        if payload.codebase_id not in codebase_store:
+        codebase_context = get_codebase_context(payload.codebase_id)
+        if codebase_context is None:
             raise HTTPException(status_code=404, detail="No codebase found for that codebase_id")
-        codebase_context = codebase_store[payload.codebase_id]
 
     try:
         result = graph.invoke(
@@ -162,7 +161,7 @@ async def upload_codebase(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="File is not a valid zip archive")
 
     codebase_id = str(uuid.uuid4())[:8]
-    codebase_store[codebase_id] = context
+    save_codebase_context(codebase_id, context)
     save_codebase_files(codebase_id, context["file_full_contents"])
 
     logger.info(f"CODEBASE uploaded | codebase_id={codebase_id} | files={len(context['file_tree'])}")
