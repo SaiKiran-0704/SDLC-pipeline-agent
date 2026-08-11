@@ -6,6 +6,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 import json
 import uuid
 import asyncio
+import os
 from fastmcp import Client
 
 from agent import generate_brd_json
@@ -104,13 +105,14 @@ def qa_node(state: PipelineState) -> PipelineState:
     return updates
 
 
-MCP_SERVER_PATH = "/Users/saik/Desktop/mcp_server/github_mcp_server.py"
 
+MCP_SERVER_PATH = "/Users/saik/Desktop/mcp_server/github_mcp_server.py"
 
 async def _run_deploy(codegen_output: list) -> dict:
     client = Client(MCP_SERVER_PATH)
     branch_name = f"pipeline-{uuid.uuid4().hex[:8]}"
     written_files = []
+    failed_files = []
 
     async with client:
         await client.call_tool("create_branch", {"branch_name": branch_name})
@@ -118,24 +120,40 @@ async def _run_deploy(codegen_output: list) -> dict:
         for file_result in codegen_output:
             if file_result.get("status") != "ok":
                 continue
-            await client.call_tool("write_file", {
-                "branch_name": branch_name,
-                "file_path": file_result["path"],
-                "content": file_result["updated_content"],
-                "commit_message": f"Update {file_result['path']} via pipeline"
-            })
-            written_files.append(file_result["path"])
+            try:
+                await client.call_tool("write_file", {
+                    "branch_name": branch_name,
+                    "file_path": file_result["path"],
+                    "content": file_result["updated_content"],
+                    "commit_message": f"Update {file_result['path']} via pipeline"
+                })
+                written_files.append(file_result["path"])
+            except Exception as e:
+                failed_files.append({"path": file_result["path"], "error": str(e)})
+
+        if not written_files:
+            return {
+                "status": "failed",
+                "branch": branch_name,
+                "note": "No files were successfully written — branch exists but is empty. No PR opened.",
+                "failed_files": failed_files
+            }
+
+        pr_body = f"Automated changes to: {', '.join(written_files)}"
+        if failed_files:
+            pr_body += f"\n\n⚠️ The following files FAILED to write and are missing from this PR: {', '.join(f['path'] for f in failed_files)}"
 
         pr_result = await client.call_tool("open_pull_request", {
             "branch_name": branch_name,
-            "title": f"Pipeline changes: {branch_name}",
-            "body": f"Automated changes to: {', '.join(written_files)}"
+            "title": f"Pipeline changes: {branch_name}" + (" (partial)" if failed_files else ""),
+            "body": pr_body
         })
 
     return {
-        "status": "success",
+        "status": "partial" if failed_files else "success",
         "branch": branch_name,
         "files_written": written_files,
+        "files_failed": failed_files,
         "pull_request": pr_result.data
     }
 
