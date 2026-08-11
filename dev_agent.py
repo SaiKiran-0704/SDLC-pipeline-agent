@@ -107,8 +107,10 @@ Rules:
 """
 
 
-def generate_code_for_file(file_plan: dict, current_content: str | None, design_summary: str) -> dict:
-    """Generates real, complete file content for one file from the Dev plan."""
+def generate_code_for_file(file_plan: dict, current_content: str | None, design_summary: str, feedback: str | None = None) -> dict:
+    """Generates real, complete file content for one file from the Dev plan.
+    If feedback is provided (e.g. from a failed QA pass), it's appended to
+    the prompt so the regeneration actually addresses the reported issues."""
     is_new = current_content is None
     contents = (
         f"Design context:\n{design_summary}\n\n"
@@ -120,6 +122,9 @@ def generate_code_for_file(file_plan: dict, current_content: str | None, design_
         contents += "This is a NEW file — write it from scratch, consistent with the codebase's existing style."
     else:
         contents += f"CURRENT file content:\n```\n{current_content}\n```\n\nModify this file per the plan above. Return the complete updated file."
+
+    if feedback:
+        contents += f"\n\nIMPORTANT — fix these issues found by QA:\n{feedback}"
 
     response = client.models.generate_content(
         model="gemini-3.5-flash",
@@ -136,10 +141,11 @@ def generate_code_for_file(file_plan: dict, current_content: str | None, design_
     return json.loads(response.text)
 
 
-def generate_all_code(dev_plan: dict, design_data: dict, codebase_id: str) -> list[dict]:
+def generate_all_code(dev_plan: dict, design_data: dict, codebase_id: str, feedback: str | None = None) -> list[dict]:
     """Runs generate_code_for_file for every file in the plan, pulling real
     current content from the DB where it exists. Returns a list of results,
-    one per file — a partial failure on one file doesn't stop the others."""
+    one per file — a partial failure on one file doesn't stop the others.
+    feedback, if provided, is passed to every file's generation call."""
     from db import get_codebase_file
 
     design_summary = f"{design_data['title']}: {design_data['architecture_overview']}"
@@ -148,7 +154,7 @@ def generate_all_code(dev_plan: dict, design_data: dict, codebase_id: str) -> li
     for file_plan in dev_plan["files"]:
         current_content = get_codebase_file(codebase_id, file_plan["path"]) if codebase_id else None
         try:
-            code_result = generate_code_for_file(file_plan, current_content, design_summary)
+            code_result = generate_code_for_file(file_plan, current_content, design_summary, feedback=feedback)
             results.append({"path": file_plan["path"], "status": "ok", **code_result})
         except Exception as e:
             results.append({"path": file_plan["path"], "status": "failed", "error": str(e)})

@@ -21,6 +21,8 @@ class PipelineState(TypedDict):
     dev_output: Optional[dict]
     codegen_output: Optional[list]
     qa_output: Optional[dict]
+    qa_retry_count: Optional[int]
+    qa_feedback: Optional[str]
     deploy_output: Optional[dict]
     approved: Optional[bool]
     feedback: Optional[str]
@@ -69,18 +71,31 @@ def dev_node(state: PipelineState) -> PipelineState:
 
 
 def codegen_node(state: PipelineState) -> PipelineState:
-    results = generate_all_code(state["dev_output"], state["design"], state.get("codebase_id"))
+    results = generate_all_code(
+        state["dev_output"], state["design"], state.get("codebase_id"),
+        feedback=state.get("qa_feedback")
+    )
     return {"codegen_output": results}
 
 
 # ---------- Stub nodes (not built yet) ----------
 
+MAX_QA_RETRIES = 2
+
 def qa_node(state: PipelineState) -> PipelineState:
     from qa_agent import run_qa
-    import json
     qa_result = run_qa(state["codegen_output"])
-    print("\n[QA RESULT]\n" + json.dumps(qa_result, indent=2) + "\n")
-    return {"qa_output": qa_result}
+    retry_count = state.get("qa_retry_count") or 0
+
+    should_retry = qa_result["overall_status"] == "fail" and retry_count < MAX_QA_RETRIES
+    updates = {"qa_output": qa_result, "qa_auto_retry": should_retry}
+
+    if should_retry:
+        issues_text = "\n".join(f"- {i['file']}: {i['description']}" for i in qa_result["issues"])
+        updates["qa_feedback"] = f"QA found issues that must be fixed:\n{issues_text}"
+        updates["qa_retry_count"] = retry_count + 1
+
+    return updates
 
 
 MCP_SERVER_PATH = "/Users/saik/Desktop/mcp_server/github_mcp_server.py"
@@ -189,7 +204,12 @@ graph_builder.add_conditional_edges("approval_codegen",
     make_router("codegen", "qa"),
     {"codegen": "codegen", "qa": "qa"})
 
-graph_builder.add_edge("qa", "approval_qa")
+def qa_result_router(state: PipelineState) -> str:
+    return "codegen" if state.get("qa_auto_retry") else "approval_qa"
+
+graph_builder.add_conditional_edges("qa", qa_result_router,
+    {"codegen": "codegen", "approval_qa": "approval_qa"})
+
 graph_builder.add_conditional_edges("approval_qa",
     make_router("qa", "deploy"),
     {"qa": "qa", "deploy": "deploy"})
