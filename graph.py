@@ -8,6 +8,7 @@ import uuid
 import asyncio
 import os
 from fastmcp import Client
+from fastmcp.client.transports import StdioTransport
 
 from agent import generate_brd_json
 from design_agent import generate_design_json
@@ -105,10 +106,19 @@ def qa_node(state: PipelineState) -> PipelineState:
     return updates
 
 
-
 MCP_SERVER_PATH = os.getenv("MCP_SERVER_PATH", "/Users/saik/Desktop/mcp_server/github_mcp_server.py")
+
 async def _run_deploy(codegen_output: list) -> dict:
-    client = Client(MCP_SERVER_PATH)
+    # STDIO-spawned subprocesses do NOT inherit the parent process's environment
+    # variables automatically (this is an MCP security feature). We must explicitly
+    # forward the specific vars the MCP server needs, or it will fail auth on
+    # platforms like Render where the shell environment isn't shared.
+    required_vars = ["GITHUB_PAT", "GITHUB_REPO"]
+    env = {var: os.environ[var] for var in required_vars if var in os.environ}
+
+    transport = StdioTransport(command="python", args=[MCP_SERVER_PATH], env=env)
+    client = Client(transport)
+
     branch_name = f"pipeline-{uuid.uuid4().hex[:8]}"
     written_files = []
     failed_files = []
