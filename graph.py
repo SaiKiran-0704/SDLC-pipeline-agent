@@ -106,8 +106,7 @@ def qa_node(state: PipelineState) -> PipelineState:
 
 
 
-MCP_SERVER_PATH = "/Users/saik/Desktop/mcp_server/github_mcp_server.py"
-
+MCP_SERVER_PATH = os.getenv("MCP_SERVER_PATH", "/Users/saik/Desktop/mcp_server/github_mcp_server.py")
 async def _run_deploy(codegen_output: list) -> dict:
     client = Client(MCP_SERVER_PATH)
     branch_name = f"pipeline-{uuid.uuid4().hex[:8]}"
