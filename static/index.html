@@ -556,12 +556,12 @@
           <button class="file-remove" id="fileRemoveBtn">✕</button>
         </div>
 
-        <div class="github-import-row">
+        <div class="github-import-row" style="display:none;">
           <span class="github-import-divider">or</span>
           <input type="text" id="githubRepoInput" class="github-repo-input" placeholder="github.com/owner/repo">
           <button class="btn-ghost-nav" id="githubImportBtn" style="flex-shrink:0;">Import</button>
         </div>
-        <div class="github-import-note">Public repos only · scans up to 150 text files</div>
+        <div class="github-import-note" style="display:none;">Public repos only · scans up to 150 text files</div>
 
         <div class="context-toggle" id="contextToggle">
           <div class="context-toggle-label">◆ Agent Context <span style="color:var(--text-faint); font-weight:400;">(optional)</span></div>
@@ -1087,12 +1087,13 @@ function renderDocContent(stage, data) {
   const primaryLabel = nextStageLabel(stage);
   const isQaFail = stage === "QA (pre-deploy)" && data.overall_status === "fail";
   html += `<div class="action-bar">
-    <button class="btn btn-primary" id="approveBtn">${primaryLabel}</button>
+    <button class="btn btn-primary" id="approveBtn" ${isQaFail ? 'disabled title="QA must pass before deploying — use Fix with AI or Request Changes"' : ''}>${primaryLabel}</button>
     ${isQaFail ? `<button class="btn btn-primary" id="fixWithAiBtn" style="background: linear-gradient(135deg, var(--could), #4FD9A0); color: #0B0C10;">⚡ Fix with AI</button>` : ''}
     <button class="btn btn-secondary" id="editBtn">Edit</button>
     <button class="btn btn-danger-outline" id="rejectBtn">Request Changes</button>
     <button class="btn btn-disabled-note" title="Chatting with the agent is coming soon" disabled>Ask AI</button>
   </div>
+  ${isQaFail ? `<div class="empty-note" style="text-align:left; margin-top:8px;">Deploy is locked while QA is failing. Retries happen automatically (up to 5) before this screen appears — you're seeing it because automatic fixing didn't resolve every issue.</div>` : ''}
   <div class="feedback-box" id="feedbackBox">
     <textarea id="feedbackInput" placeholder="What should change?"></textarea>
     <div class="feedback-actions">
@@ -1103,7 +1104,9 @@ function renderDocContent(stage, data) {
 
   el.innerHTML = html;
 
-  document.getElementById('approveBtn').addEventListener('click', () => resumePipeline(true, null));
+  if (!isQaFail) {
+    document.getElementById('approveBtn').addEventListener('click', () => resumePipeline(true, null));
+  }
   if (isQaFail) {
     document.getElementById('fixWithAiBtn').addEventListener('click', () => {
       const autoFeedback = "Fix these QA issues:\n" + (data.issues || []).map(i => `- ${i.file}: ${i.description}`).join('\n');
@@ -1241,7 +1244,11 @@ function renderQAContent(qa) {
   }
 
   if (!passed) {
-    html += `<div class="qa-retry-note">This run has already gone through automatic retries with this feedback sent back to Codegen. Approving now sends it to Deploy anyway — use "Fix with AI" to retry with these exact issues, or "Request Changes" to add your own instructions.</div>`;
+    const attempts = qa.retries_used || 0;
+    const attemptsText = attempts > 0
+      ? `This code went through ${attempts} automatic fix attempt${attempts === 1 ? '' : 's'} before reaching you.`
+      : `This is the first check — no automatic fixes have been attempted yet.`;
+    html += `<div class="qa-retry-note">${attemptsText} Deploy is locked until QA passes — use "Fix with AI" to retry with these exact issues, or "Request Changes" to add your own instructions.</div>`;
   }
 
   return html;
@@ -1331,9 +1338,10 @@ function showCompletion(result, downloadUrl) {
   html += sectionHTML('sec-files', 'Files Deployed', filesInner);
 
   const qaPassed = qa.overall_status === 'pass';
+  const qaAttempts = qa.retries_used || 0;
   html += sectionHTML('sec-qa', 'QA Verdict', `<div class="qa-summary" style="margin-bottom:0;">
     <span class="qa-badge ${qaPassed ? 'pass' : 'fail'}">${qaPassed ? '✓ Pass' : '✗ Fail — approved anyway'}</span>
-    <span class="qa-meta">${(qa.issues || []).length} issue${(qa.issues || []).length === 1 ? '' : 's'} at time of approval</span>
+    <span class="qa-meta">${(qa.issues || []).length} issue${(qa.issues || []).length === 1 ? '' : 's'} at time of approval${qaAttempts > 0 ? ` · ${qaAttempts} auto-fix attempt${qaAttempts === 1 ? '' : 's'}` : ''}</span>
   </div>`);
 
   if (deploy.branch) {

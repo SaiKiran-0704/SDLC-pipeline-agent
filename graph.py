@@ -88,7 +88,7 @@ def codegen_node(state: PipelineState) -> PipelineState:
 
 # ---------- Stub nodes (not built yet) ----------
 
-MAX_QA_RETRIES = 2
+MAX_QA_RETRIES = 5
 
 def qa_node(state: PipelineState) -> PipelineState:
     from qa_agent import run_qa
@@ -96,6 +96,7 @@ def qa_node(state: PipelineState) -> PipelineState:
     retry_count = state.get("qa_retry_count") or 0
 
     should_retry = qa_result["overall_status"] == "fail" and retry_count < MAX_QA_RETRIES
+    qa_result["retries_used"] = retry_count  # true count of auto-fix attempts already made before this result
     updates = {"qa_output": qa_result, "qa_auto_retry": should_retry}
 
     if should_retry:
