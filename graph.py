@@ -201,6 +201,22 @@ def make_router(retry_node: str, next_node: str):
     return router
 
 
+def qa_approval_node(state: PipelineState) -> PipelineState:
+    decision = interrupt({
+        "question": "Approve QA (pre-deploy)?",
+        "stage": "QA (pre-deploy)",
+        "data": state["qa_output"]
+    })
+    updates = {"approved": decision["approved"], "feedback": decision.get("feedback")}
+    # codegen_node reads qa_feedback, not feedback — without this, a human's
+    # "Fix with AI" / "Request Changes" click at this stage was silently
+    # ignored, and codegen regenerated using stale feedback left over from
+    # the last automatic retry instead of the issues actually shown here.
+    if not decision["approved"] and decision.get("feedback"):
+        updates["qa_feedback"] = decision["feedback"]
+    return updates
+
+
 # ---------- Build the graph ----------
 
 graph_builder = StateGraph(PipelineState)
@@ -214,7 +230,7 @@ graph_builder.add_node("approval_dev", make_approval_node("Development", "dev_ou
 graph_builder.add_node("codegen", codegen_node)
 graph_builder.add_node("approval_codegen", make_approval_node("Generated Code", "codegen_output"))
 graph_builder.add_node("qa", qa_node)
-graph_builder.add_node("approval_qa", make_approval_node("QA (pre-deploy)", "qa_output"))
+graph_builder.add_node("approval_qa", qa_approval_node)
 graph_builder.add_node("deploy", deploy_node)
 
 graph_builder.add_edge(START, "requirements")
