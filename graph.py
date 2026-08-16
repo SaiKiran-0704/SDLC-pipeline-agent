@@ -244,8 +244,8 @@ graph_builder.add_conditional_edges("qa", qa_result_router,
     {"codegen": "codegen", "approval_qa": "approval_qa"})
 
 graph_builder.add_conditional_edges("approval_qa",
-    make_router("qa", "deploy"),
-    {"qa": "qa", "deploy": "deploy"})
+    make_router("codegen", "deploy"),
+    {"codegen": "codegen", "deploy": "deploy"})
 
 graph_builder.add_edge("deploy", END)
 
