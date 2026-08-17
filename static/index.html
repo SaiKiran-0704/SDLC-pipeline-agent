@@ -124,6 +124,33 @@
   }
   .btn-ghost-nav:hover { border-color: var(--violet-soft); background: var(--panel); }
 
+  .user-menu { position: relative; }
+  .avatar-btn {
+    width: 30px; height: 30px; border-radius: 50%; border: none; padding: 0;
+    cursor: pointer; overflow: hidden; background: var(--panel-raised);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .avatar-btn img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .avatar-fallback {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--violet-soft), var(--violet));
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 11px; font-weight: 600; color: #0B0C10;
+  }
+  .user-dropdown {
+    display: none; position: absolute; top: 40px; right: 0; min-width: 180px;
+    background: var(--panel-raised); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    box-shadow: 0 12px 32px -8px rgba(0,0,0,0.5); overflow: hidden; z-index: 50;
+  }
+  .user-dropdown.open { display: block; }
+  .user-dropdown-name { padding: 12px 14px; font-size: 13px; font-weight: 600; color: var(--text); border-bottom: 1px solid var(--border-soft); }
+  .user-dropdown-item {
+    display: block; width: 100%; text-align: left; background: transparent; border: none;
+    padding: 10px 14px; font-family: var(--sans); font-size: 13px; color: var(--text-dim);
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  .user-dropdown-item:hover { background: var(--panel); color: var(--text); }
+
   /* ---------- layout ---------- */
   .app { position: relative; z-index: 1; max-width: 1240px; margin: 0 auto; padding: 0 24px 100px; }
   .hero { padding: 56px 0 36px; max-width: 640px; }
@@ -511,7 +538,7 @@
   <div class="nav-right">
     <button class="btn-ghost-nav" id="newRequestBtn">New Request</button>
     <button class="icon-btn" id="cmdkTrigger" title="Command palette (⌘K)">⌘</button>
-    <div class="avatar" title="Signed-in accounts are coming soon">S</div>
+    <div id="authArea"></div>
   </div>
 </nav>
 
@@ -1400,6 +1427,58 @@ document.addEventListener('keydown', (e) => {
     if (document.getElementById('landingView').style.display !== 'none') submitRequest();
   }
 });
+
+/* ---------------- auth ---------------- */
+async function loadAuthState() {
+  const authArea = document.getElementById('authArea');
+  try {
+    const res = await fetch('/auth/me');
+    const data = await res.json();
+    if (data.logged_in) {
+      renderLoggedIn(authArea, data);
+    } else {
+      renderLoggedOut(authArea);
+    }
+  } catch (err) {
+    renderLoggedOut(authArea);
+  }
+}
+
+function renderLoggedOut(authArea) {
+  authArea.innerHTML = `<button class="btn-ghost-nav" id="loginBtn">Login with GitHub</button>`;
+  document.getElementById('loginBtn').addEventListener('click', () => {
+    window.location.href = '/auth/github/login';
+  });
+}
+
+function renderLoggedIn(authArea, data) {
+  const initial = (data.username || '?').charAt(0).toUpperCase();
+  authArea.innerHTML = `
+    <div class="user-menu">
+      <button class="avatar-btn" id="avatarBtn" aria-label="Account menu">
+        ${data.avatar_url ? `<img src="${data.avatar_url}" alt="${escapeHtml(data.username)}">` : `<span class="avatar-fallback">${initial}</span>`}
+      </button>
+      <div class="user-dropdown" id="userDropdown">
+        <div class="user-dropdown-name">${escapeHtml(data.username)}</div>
+        <button class="user-dropdown-item" id="logoutBtn">Log out</button>
+      </div>
+    </div>`;
+
+  const dropdown = document.getElementById('userDropdown');
+  document.getElementById('avatarBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    dropdown.classList.toggle('open');
+  });
+  document.addEventListener('click', () => dropdown.classList.remove('open'));
+
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await fetch('/auth/logout', { method: 'POST' });
+    toast('Logged out', 'ok');
+    loadAuthState();
+  });
+}
+
+loadAuthState();
 
 submitBtn.addEventListener('click', submitRequest);
 </script>

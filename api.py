@@ -7,13 +7,15 @@ from db import save_codebase_files, get_codebase_file, init_db, save_codebase_co
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-
+from starlette.middleware.sessions import SessionMiddleware
+from auth import router as auth_router, init_auth_db
 from agent import generate_brd_json, render_docx
 from design_agent import generate_design_json, render_design_docx
 from graph import graph
 from langgraph.types import Command
 from codebase_context import extract_and_scan
-
+from starlette.middleware.sessions import SessionMiddleware
+from auth import router as auth_router, init_auth_db
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s"
@@ -21,8 +23,12 @@ logging.basicConfig(
 logger = logging.getLogger("requirements_agent")
 
 app = FastAPI()
+app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET_KEY"))
+app.include_router(auth_router)
+app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET_KEY"))
+app.include_router(auth_router)
 init_db()
-
+init_auth_db()
 
 class RequirementRequest(BaseModel):
     request_text: str
