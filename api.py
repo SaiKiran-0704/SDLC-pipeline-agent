@@ -3,19 +3,20 @@ import time
 import uuid
 import os
 import zipfile
+import requests
 from db import save_codebase_files, get_codebase_file, init_db, save_codebase_context, get_codebase_context, save_brd, get_brd
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
-from auth import router as auth_router, init_auth_db
+
 from agent import generate_brd_json, render_docx
 from design_agent import generate_design_json, render_design_docx
 from graph import graph
 from langgraph.types import Command
 from codebase_context import extract_and_scan
-from starlette.middleware.sessions import SessionMiddleware
-from auth import router as auth_router, init_auth_db
+from auth import router as auth_router, init_auth_db, get_current_user
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s"
@@ -25,10 +26,9 @@ logger = logging.getLogger("requirements_agent")
 app = FastAPI()
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET_KEY"))
 app.include_router(auth_router)
-app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET_KEY"))
-app.include_router(auth_router)
 init_db()
 init_auth_db()
+
 
 class RequirementRequest(BaseModel):
     request_text: str
@@ -36,6 +36,7 @@ class RequirementRequest(BaseModel):
 class StartPipelineRequest(BaseModel):
     request_text: str
     codebase_id: str | None = None
+    github_repo: str | None = None
 
 class ResumeRequest(BaseModel):
     approved: bool
@@ -95,11 +96,34 @@ def format_interrupt_response(thread_id, result):
     return {"status": "paused", "thread_id": thread_id, "stage": payload["stage"], "data": payload["data"]}
 
 
+@app.get("/repos")
+def list_repos(request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not logged in")
+
+    resp = requests.get(
+        "https://api.github.com/user/repos",
+        headers={"Authorization": f"Bearer {user['access_token']}"},
+        params={"per_page": 100, "sort": "updated", "affiliation": "owner"},
+        timeout=10,
+    )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Could not fetch repos from GitHub — try logging in again")
+
+    repos = [{"full_name": r["full_name"], "private": r["private"]} for r in resp.json()]
+    return {"repos": repos}
+
+
 @app.post("/pipeline/start")
-def start_pipeline(payload: StartPipelineRequest):
+def start_pipeline(payload: StartPipelineRequest, request: Request):
     thread_id = str(uuid.uuid4())
     config = {"configurable": {"thread_id": thread_id}}
-    logger.info(f"PIPELINE start | thread_id={thread_id} | codebase_id={payload.codebase_id}")
+
+    user = get_current_user(request)
+    user_id = user["id"] if user else None
+
+    logger.info(f"PIPELINE start | thread_id={thread_id} | codebase_id={payload.codebase_id} | user_id={user_id} | github_repo={payload.github_repo}")
 
     codebase_context = None
     if payload.codebase_id:
@@ -114,7 +138,8 @@ def start_pipeline(payload: StartPipelineRequest):
                  "brd": None, "design": None,
                  "dev_output": None, "codegen_output": None,
                  "qa_output": None, "deploy_output": None,
-                 "approved": None, "feedback": None},
+                 "approved": None, "feedback": None,
+                 "user_id": user_id, "github_repo": payload.github_repo},
                 config=config
         )
     except RuntimeError as e:

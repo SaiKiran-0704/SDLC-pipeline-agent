@@ -29,6 +29,8 @@ class PipelineState(TypedDict):
     deploy_output: Optional[dict]
     approved: Optional[bool]
     feedback: Optional[str]
+    user_id: Optional[int]
+    github_repo: Optional[str]
 
 
 # ---------- Real agent nodes ----------
@@ -109,14 +111,11 @@ def qa_node(state: PipelineState) -> PipelineState:
 
 MCP_SERVER_PATH = os.getenv("MCP_SERVER_PATH", "/Users/saik/Desktop/mcp_server/github_mcp_server.py")
 
-async def _run_deploy(codegen_output: list) -> dict:
-    # STDIO-spawned subprocesses do NOT inherit the parent process's environment
-    # variables automatically (this is an MCP security feature). We must explicitly
-    # forward the specific vars the MCP server needs, or it will fail auth on
-    # platforms like Render where the shell environment isn't shared.
-    required_vars = ["GITHUB_PAT", "GITHUB_REPO"]
-    env = {var: os.environ[var] for var in required_vars if var in os.environ}
-
+async def _run_deploy(codegen_output: list, github_token: str, github_repo: str) -> dict:
+    # Per-user credentials, not the shared env vars — each deploy authenticates
+    # as whichever user is actually running the pipeline, against the repo
+    # they chose, so the PR lands in THEIR GitHub, not a shared test repo.
+    env = {"GITHUB_PAT": github_token, "GITHUB_REPO": github_repo}
     transport = StdioTransport(command="python", args=[MCP_SERVER_PATH], env=env)
     client = Client(transport)
 
@@ -175,8 +174,21 @@ def deploy_node(state: PipelineState) -> PipelineState:
     if not ok_files:
         return {"deploy_output": {"status": "failed", "note": "No successfully generated files to deploy"}}
 
+    user_id = state.get("user_id")
+    github_repo = state.get("github_repo")
+    if not user_id or not github_repo:
+        return {"deploy_output": {
+            "status": "failed",
+            "note": "No GitHub account or repo selected — log in with GitHub and pick a repo before running this."
+        }}
+
+    from auth import get_user_by_id
+    user = get_user_by_id(user_id)
+    if not user:
+        return {"deploy_output": {"status": "failed", "note": "Logged-in user not found — please log in again."}}
+
     try:
-        result = asyncio.run(_run_deploy(codegen_output))
+        result = asyncio.run(_run_deploy(codegen_output, user["access_token"], github_repo))
         return {"deploy_output": result}
     except Exception as e:
         return {"deploy_output": {"status": "failed", "error": str(e)}}
@@ -285,7 +297,8 @@ if __name__ == "__main__":
         {"user_request": user_request, "codebase_context": None, "codebase_id": None,
          "brd": None, "design": None, "dev_output": None, "codegen_output": None,
          "qa_output": None, "deploy_output": None,
-         "approved": None, "feedback": None},
+         "approved": None, "feedback": None,
+         "user_id": None, "github_repo": None},
         config=config
     )
 
