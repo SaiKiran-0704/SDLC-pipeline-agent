@@ -255,6 +255,11 @@
   .github-repo-input::placeholder { color: var(--text-faint); }
   .github-import-note { font-family: var(--mono); font-size: 11px; color: var(--text-faint); margin-top: 6px; }
 
+  .rag-msg { padding: 10px 12px; border-radius: 8px; font-size: 13px; line-height: 1.55; }
+  .rag-msg.user { background: var(--violet-glow); color: var(--text); align-self: flex-end; max-width: 85%; }
+  .rag-msg.assistant { background: var(--bg-alt); border: 1px solid var(--border); color: var(--text-dim); }
+  .rag-msg.assistant .rag-sources { margin-top: 8px; font-family: var(--mono); font-size: 10.5px; color: var(--text-faint); }
+
   /* agent context (visual, not yet wired to generation) */
   .context-toggle {
     margin-top: 16px; display: flex; align-items: center; justify-content: space-between;
@@ -595,6 +600,23 @@
           <option value="">Login with GitHub to select a repo</option>
         </select>
         <div class="github-import-note">Approved code deploys as a PR against this repo</div>
+
+        <div class="eyebrow" style="margin-top:20px;">Knowledge base repo</div>
+        <div style="display:flex; gap:8px;">
+          <select id="ragRepoSelect" class="github-repo-input" style="width:100%;" disabled>
+            <option value="">Login with GitHub to select a repo</option>
+          </select>
+          <button class="btn-ghost-nav" id="ragIngestBtn" style="flex-shrink:0;" disabled>Ingest</button>
+        </div>
+        <div class="github-import-note" id="ragStatusNote">Understand a repo well enough to answer questions about it</div>
+
+        <div id="ragChatPanel" style="display:none; margin-top:16px;">
+          <div id="ragChatLog" style="max-height:260px; overflow-y:auto; display:flex; flex-direction:column; gap:10px; margin-bottom:10px;"></div>
+          <div style="display:flex; gap:8px;">
+            <input type="text" id="ragChatInput" class="github-repo-input" style="width:100%;" placeholder="Ask something about this repo…">
+            <button class="btn-ghost-nav" id="ragChatSendBtn" style="flex-shrink:0;">Ask</button>
+          </div>
+        </div>
 
         <div class="context-toggle" id="contextToggle">
           <div class="context-toggle-label">◆ Agent Context <span style="color:var(--text-faint); font-weight:400;">(optional)</span></div>
@@ -1447,13 +1469,16 @@ async function loadAuthState() {
     if (data.logged_in) {
       renderLoggedIn(authArea, data);
       loadRepoPicker();
+      loadRagRepoPicker();
     } else {
       renderLoggedOut(authArea);
       resetRepoPicker();
+      resetRagRepoPicker();
     }
   } catch (err) {
     renderLoggedOut(authArea);
     resetRepoPicker();
+    resetRagRepoPicker();
   }
 }
 
@@ -1487,6 +1512,143 @@ async function loadRepoPicker() {
 
 document.getElementById('repoSelect').addEventListener('change', (e) => {
   selectedRepo = e.target.value || null;
+});
+
+/* ---------------- RAG: repo picker, ingest, chat ---------------- */
+let selectedRagRepo = null;
+
+function resetRagRepoPicker() {
+  const select = document.getElementById('ragRepoSelect');
+  select.innerHTML = '<option value="">Login with GitHub to select a repo</option>';
+  select.disabled = true;
+  document.getElementById('ragIngestBtn').disabled = true;
+  document.getElementById('ragChatPanel').style.display = 'none';
+  selectedRagRepo = null;
+}
+
+async function loadRagRepoPicker() {
+  const select = document.getElementById('ragRepoSelect');
+  select.innerHTML = '<option value="">Loading your repos…</option>';
+  try {
+    const res = await fetch('/repos');
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    if (!data.repos.length) {
+      select.innerHTML = '<option value="">No repos found on your GitHub account</option>';
+      return;
+    }
+    select.innerHTML = '<option value="">Select a repo…</option>' +
+      data.repos.map(r => `<option value="${escapeHtml(r.full_name)}">${escapeHtml(r.full_name)}${r.private ? ' (private)' : ''}</option>`).join('');
+    select.disabled = false;
+  } catch (err) {
+    select.innerHTML = '<option value="">Could not load repos</option>';
+  }
+}
+
+document.getElementById('ragRepoSelect').addEventListener('change', async (e) => {
+  selectedRagRepo = e.target.value || null;
+  document.getElementById('ragIngestBtn').disabled = !selectedRagRepo;
+  document.getElementById('ragChatPanel').style.display = 'none';
+  document.getElementById('ragChatLog').innerHTML = '';
+
+  if (!selectedRagRepo) return;
+  const note = document.getElementById('ragStatusNote');
+  note.textContent = 'Checking if this repo is already understood…';
+  try {
+    const res = await fetch(`/rag/status?repo_full_name=${encodeURIComponent(selectedRagRepo)}`);
+    const data = await res.json();
+    if (data.ingested) {
+      note.textContent = 'Already understood — ask away, or re-ingest if the repo changed.';
+      document.getElementById('ragChatPanel').style.display = 'block';
+    } else {
+      note.textContent = 'Not understood yet — click Ingest first.';
+    }
+  } catch (err) {
+    note.textContent = 'Understand a repo well enough to answer questions about it';
+  }
+});
+
+document.getElementById('ragIngestBtn').addEventListener('click', async () => {
+  if (!selectedRagRepo) return;
+  const btn = document.getElementById('ragIngestBtn');
+  const note = document.getElementById('ragStatusNote');
+  btn.disabled = true;
+  btn.textContent = 'Reading…';
+  note.textContent = 'Cloning, chunking, and embedding this repo — this can take a minute for larger repos.';
+
+  try {
+    const res = await fetch('/rag/ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo_full_name: selectedRagRepo })
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      let detail = errText;
+      try { detail = JSON.parse(errText).detail || errText; } catch (e) {}
+      throw new Error(detail);
+    }
+    const data = await res.json();
+    note.textContent = `Understood ${data.files_processed} files (${data.chunks_stored} chunks). Ask away.`;
+    document.getElementById('ragChatPanel').style.display = 'block';
+    toast('Repo ingested', 'ok');
+  } catch (err) {
+    note.textContent = 'Ingest failed — see error below';
+    toast(`Ingest failed: ${err.message}`, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Ingest';
+  }
+});
+
+function addRagMessage(role, html) {
+  const log = document.getElementById('ragChatLog');
+  const el = document.createElement('div');
+  el.className = `rag-msg ${role}`;
+  el.innerHTML = html;
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+}
+
+async function sendRagChat() {
+  const input = document.getElementById('ragChatInput');
+  const question = input.value.trim();
+  if (!question || !selectedRagRepo) return;
+
+  addRagMessage('user', escapeHtml(question));
+  input.value = '';
+  const sendBtn = document.getElementById('ragChatSendBtn');
+  sendBtn.disabled = true;
+  addRagMessage('assistant', '<span id="ragThinking">Thinking…</span>');
+
+  try {
+    const res = await fetch('/rag/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo_full_name: selectedRagRepo, question })
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      let detail = errText;
+      try { detail = JSON.parse(errText).detail || errText; } catch (e) {}
+      throw new Error(detail);
+    }
+    const data = await res.json();
+    document.getElementById('ragThinking').parentElement.innerHTML =
+      escapeHtml(data.answer).replace(/\n/g, '<br>') +
+      (data.sources && data.sources.length
+        ? `<div class="rag-sources">Sources: ${data.sources.map(s => escapeHtml(s.path)).join(', ')}</div>`
+        : '');
+  } catch (err) {
+    document.getElementById('ragThinking').parentElement.innerHTML = `Error: ${escapeHtml(err.message)}`;
+  } finally {
+    sendBtn.disabled = false;
+  }
+}
+
+document.getElementById('ragChatSendBtn').addEventListener('click', sendRagChat);
+document.getElementById('ragChatInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); sendRagChat(); }
 });
 
 function renderLoggedOut(authArea) {

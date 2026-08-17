@@ -16,6 +16,7 @@ from graph import graph
 from langgraph.types import Command
 from codebase_context import extract_and_scan
 from auth import router as auth_router, init_auth_db, get_current_user
+from rag.rag_ingest import init_rag_db, ingest_repo, answer_question, repo_is_ingested, GitHubImportError as RagGitHubImportError
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,6 +29,7 @@ app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET_KEY")
 app.include_router(auth_router)
 init_db()
 init_auth_db()
+init_rag_db()
 
 
 class RequirementRequest(BaseModel):
@@ -41,6 +43,13 @@ class StartPipelineRequest(BaseModel):
 class ResumeRequest(BaseModel):
     approved: bool
     feedback: str | None = None
+
+class RagIngestRequest(BaseModel):
+    repo_full_name: str
+
+class RagChatRequest(BaseModel):
+    repo_full_name: str
+    question: str
 
 
 @app.post("/brd")
@@ -197,6 +206,42 @@ async def upload_codebase(file: UploadFile = File(...)):
 
     logger.info(f"CODEBASE uploaded | codebase_id={codebase_id} | files={len(context['file_tree'])}")
     return {"codebase_id": codebase_id, "file_count": len(context["file_tree"]), "file_tree": context["file_tree"][:50]}
+
+
+@app.post("/rag/ingest")
+def rag_ingest(payload: RagIngestRequest, request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Log in with GitHub first")
+
+    logger.info(f"RAG ingest requested | repo={payload.repo_full_name} | user_id={user['id']}")
+    try:
+        stats = ingest_repo(payload.repo_full_name, token=user["access_token"])
+    except RagGitHubImportError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    logger.info(f"RAG ingest completed | repo={payload.repo_full_name} | {stats}")
+    return stats
+
+
+@app.get("/rag/status")
+def rag_status(repo_full_name: str):
+    return {"ingested": repo_is_ingested(repo_full_name)}
+
+
+@app.post("/rag/chat")
+def rag_chat(payload: RagChatRequest, request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Log in with GitHub first")
+
+    logger.info(f"RAG chat | repo={payload.repo_full_name} | question=\"{payload.question[:80]}...\"")
+    try:
+        result = answer_question(payload.repo_full_name, payload.question)
+    except Exception as e:
+        logger.error(f"RAG chat failed | reason={e}")
+        raise HTTPException(status_code=502, detail=str(e))
+    return result
 
 
 @app.get("/")
